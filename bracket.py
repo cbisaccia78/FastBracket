@@ -8,6 +8,18 @@ class Team:
         self.name = name
         self.seed = seed
 
+    def __eq__(self, other: "Team"):
+        if type(other) != Team:
+            raise TypeError("Tried to compare eq between Team and non-Team type")
+        
+        return (
+            self.name == other.name and 
+            self.seed == other.seed
+        )
+
+    def __hash__(self):
+        return hash((self.name, self.seed))
+
     def __repr__(self):
         return f"{self.name}({self.seed})"
 
@@ -24,6 +36,21 @@ class Pairing:
 
         self.winner = None
         self.loser = None
+    
+    def __eq__(self, other: "Pairing"):
+        if type(other) != Pairing:
+            raise TypeError("Tried to compare eq between Pairing and non-Pairing type")
+        
+        return (
+            self.team1 == other.team1 and
+            self.team2 == other.team2 and
+            self.round == other.round and
+            self.winner == other.winner and
+            self.loser == other.loser
+        )
+    
+    def __hash__(self):
+        return hash((self.team1, self.team2))
     
     def __repr__(self):
         return f"{self.team1}\n{'-'*15}\n{' '*15}|\n{' '*15}|\n{' '*15}|\n{' '*15}|\n{self.team2}{' '*(15 - len(str(self.team2)))}|\n{'-'*15}"
@@ -58,14 +85,15 @@ class Pairing:
 class Bracket:
     def __init__(self, owner: str, pairings: List[List[Pairing]]):
         self.owner = owner
-        self.pairings = pairings
+        
+        self.pairings = {} # hashmap from hashed pairing -> pairing so we can index into pairing through another pairing object
 
-    def update(self, winners: List[Team], round):
+    def update(self, pairings: List[Pairing], round: int):
         if round < 1 or round > len(self.pairings):
             raise ValueError(f"round {round} must be greater than 0 and less than the total number of rounds stored")
         potential_pairings = self.pairings[round]
-        for winner in winners:
-            if 
+        
+        for 
 
     def calculate_score(self):
         score = 0
