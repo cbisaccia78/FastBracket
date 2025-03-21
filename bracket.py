@@ -1,4 +1,5 @@
 from typing import List
+from math import log2, floor
 
 class Team:
     def __init__(self, name: str, seed: int):
@@ -36,6 +37,8 @@ class Pairing:
 
         self.winner = None
         self.loser = None
+
+        self.next = None
     
     def __eq__(self, other: "Pairing"):
         if type(other) != Pairing:
@@ -50,7 +53,7 @@ class Pairing:
         )
     
     def __hash__(self):
-        return hash((self.team1, self.team2))
+        return hash((self.team1, self.team2, self.round))
     
     def __repr__(self):
         return f"{self.team1}\n{'-'*15}\n{' '*15}|\n{' '*15}|\n{' '*15}|\n{' '*15}|\n{self.team2}{' '*(15 - len(str(self.team2)))}|\n{'-'*15}"
@@ -84,23 +87,30 @@ class Pairing:
 
 class Bracket:
     def __init__(self, owner: str, pairings: List[List[Pairing]]):
-        self.owner = owner
+        if not log2(len(pairings)).is_integer():
+            raise ValueError("Bracket size must be an exponent of 2")
         
-        self.pairings = {} # hashmap from hashed pairing -> pairing so we can index into pairing through another pairing object
+        self.owner: str = owner
+        # To-Do - currently cannot create an empty bracket because of hash collisions
+        self.pairings = {hash(pairing): pairing for pairing in pairings} # hashmap from hashed pairing -> pairing so we can index into pairing through another pairing object
+        self.winner: Team = None
 
-    def update(self, pairings: List[Pairing], round: int):
-        if round < 1 or round > len(self.pairings):
-            raise ValueError(f"round {round} must be greater than 0 and less than the total number of rounds stored")
-        potential_pairings = self.pairings[round]
-        
-        for 
-
-    def calculate_score(self):
+    def update(self, pairing: Pairing):
+        to_update = self.pairings.get(pairing, None)
+        if to_update is None:
+            # insert
+            self.pairings[pairing] = pairing
+        else:
+            to_update.winner, to_update.loser = pairing.winner, pairing.loser
+            
+        # check if there's a winner
+        if pairing.round == log2(len(self.pairings)) + 1:
+            self.winner = pairing.winner
+    
+    @property
+    def current_score(self):
         score = 0
-        for round_pairings in self.pairings:
-            for pairing in round_pairings:
-                if pairing.finished:
-                    score += pairing.calculate_score()
+        
         return score
 
 creighton = Team("creighton", 8)
