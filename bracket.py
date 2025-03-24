@@ -1,5 +1,11 @@
+import sys
+import pickle
+import json
+
 from typing import List
-from math import log2, floor
+from math import log2
+
+from pydantic import ValidationError
 
 class Team:
     def __init__(self, name: str, seed: int):
@@ -26,7 +32,7 @@ class Team:
 
 
 class Pairing:
-    def __init__(self, team1: Team, team2: Team, round: int=1):
+    def __init__(self, team1: Team, team2: Team, round: int=1, pick: Team=None):
         if round < 1:
             raise ValueError(f"Round {round} must be greater than 0.")
         
@@ -34,6 +40,8 @@ class Pairing:
         self.team2 = team2
 
         self.round = round
+
+        self.pick = pick
 
         self.winner = None
         self.loser = None
@@ -57,16 +65,10 @@ class Pairing:
     
     def __repr__(self):
         return f"{self.team1}\n{'-'*15}\n{' '*15}|\n{' '*15}|\n{' '*15}|\n{' '*15}|\n{self.team2}{' '*(15 - len(str(self.team2)))}|\n{'-'*15}"
-    
-    def set_result(self, winning_team: Team):
-        if winning_team != self.team1 and winning_team != self.team2:
-            raise ValueError(f"Winning team {winning_team} must be one of {self.team1} or {self.team2}")
 
-        self.winner, self.loser = (self.team1, self.team2) if winning_team == self.team1 else (self.team2, self.team1)
-    
-    def calculate_score(self):
-        if not self.finished:
-            return -1
+    def calculate_score(self) -> float:
+        if not self.finished or self.pick is None or self.pick != self.winner:
+            return 0
 
         team1 = self.team1
         team2 = self.team2
@@ -82,20 +84,24 @@ class Pairing:
             return (underdog.seed / favorite.seed) * (2**(self.round - 1))
     
     @property
-    def finished(self):
+    def finished(self) -> bool:
         return not (self.winner is None or self.loser is None)
 
 class Bracket:
-    def __init__(self, owner: str, pairings: List[List[Pairing]]):
-        if not log2(len(pairings)).is_integer():
+    def __init__(self, owner: str, pairings: List[Pairing], total_teams: int, name="bracket"):
+        if not log2(total_teams).is_integer():
             raise ValueError("Bracket size must be an exponent of 2")
         
+        self._total_rounds = log2(total_teams) + 1
+        self._validate_initial_pairings(pairings)
+
         self.owner: str = owner
+        self.name: str = name
         # To-Do - currently cannot create an empty bracket because of hash collisions
         self.pairings = {hash(pairing): pairing for pairing in pairings} # hashmap from hashed pairing -> pairing so we can index into pairing through another pairing object
         self.winner: Team = None
 
-    def update(self, pairing: Pairing):
+    def update(self, pairing: Pairing) -> None:
         to_update = self.pairings.get(pairing, None)
         if to_update is None:
             # insert
@@ -104,18 +110,62 @@ class Bracket:
             to_update.winner, to_update.loser = pairing.winner, pairing.loser
             
         # check if there's a winner
-        if pairing.round == log2(len(self.pairings)) + 1:
+        if pairing.round == self._total_rounds:
             self.winner = pairing.winner
+
+    def save(self, filepath="") -> None:
+        if filepath == "":
+            filepath = f"./{self.owner}-{self.name}.pkl"
+
+        try:
+            with open(filepath, "wb") as file:
+                pickle.dump(self, file)
+            print(f"Bracket pickled successfully to '{filepath}'")
+        except Exception as e:
+            print(f"Error during pickling: {e}")
     
     @property
-    def current_score(self):
-        score = 0
-        
-        return score
+    def current_score(self) -> int:
+        return sum(pairing.calculate_score() for pairing in self.pairings.values())
+    
+    def _validate_initial_pairings(self, pairings: List[Pairing]) -> None:
+        for pairing in pairings:
+            if pairing.team1 is None or pairing.team2 is None or pairing.round > self._total_rounds:
+                raise ValueError(f"Pairing {pairing} is invalid.")
 
-creighton = Team("creighton", 8)
-louisville = Team("louisville", 9)
-p = Pairing(creighton, louisville, 4)
-print(p)
-p.set_result(louisville)
-print(p.calculate_score())
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        bracket_filepath = sys.argv[1]
+        try:
+            with open(bracket_filepath, "rb") as file:
+                bracket = pickle.load(file)
+            print(f"Bracket loaded successfully from '{bracket_filepath}'")
+        except FileNotFoundError:
+            print(f"Error: Bracket '{bracket_filepath}' not found.")
+            exit(1)
+        except Exception as e:
+            print(f"Error during loading: {e}")
+            exit(2)
+    else:
+        owner = input("Enter your name: ")
+        bracket_name = input("Enter a name for your bracket: ")
+        try:
+            raw_pairings_list = json.loads(
+                input("Enter a space separated list of json pairing objects of form [{team1: [name, seed], team2: [name, seed], round: round, [pick: [name, seed]], [winner: [name, seed]]}, ...]")
+            )
+            pairings_list = [Pairing(PairingBase(**raw_pairing)) for raw_pairing in raw_pairings_list]
+
+        except json.JSONDecodeError:
+            print("Invalid json structure for pairings list.")
+            exit(3)
+        except ValidationError as e:
+            print(e.errors())
+            exit(4)
+
+    creighton = Team("creighton", 8)
+    louisville = Team("louisville", 9)
+    p = Pairing(creighton, louisville, 4)
+    print(p)
+    p.set_result(louisville)
+    print(p.calculate_score())
